@@ -81,4 +81,13 @@ describe("project file store", () => {
     );
     expect((await readTranscript(id)).map((m) => m.text)).toEqual(["kept"]);
   });
+
+  it("makes the workspace its own git repo with a stage file", async () => {
+    const { id } = await createProject("Own repo");
+    const ws = workspaceDir(id);
+    expect((await stat(path.join(ws, ".git"))).isDirectory()).toBe(true);
+    expect(await readFile(path.join(ws, ".builder", "stage"), "utf8")).toBe(
+      "Init\n"
+    );
+  });
 });

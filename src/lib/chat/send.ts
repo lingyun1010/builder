@@ -8,8 +8,11 @@ import {
   type ChatMessage,
 } from "../store/projects";
 import { getApiKey } from "../store/secrets";
+import { readStage } from "../workspace/stage";
+import type { Stage } from "../../stages";
 
-export type ChatEvent = AgentEvent | { type: "done"; messages: ChatMessage[] };
+export type ChatEvent =
+  AgentEvent | { type: "done"; messages: ChatMessage[]; stage: Stage };
 
 export type ChatErrorCode = "not_found" | "empty" | "no_key" | "busy";
 
@@ -132,7 +135,11 @@ async function* run(
         })
       );
     }
-    yield { type: "done", messages: saved };
+    yield {
+      type: "done",
+      messages: saved,
+      stage: await readStage(workspaceDir(projectId)),
+    };
   } finally {
     running.delete(projectId);
   }

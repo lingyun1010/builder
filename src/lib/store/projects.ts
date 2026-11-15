@@ -1,3 +1,4 @@
+import { execFile } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import {
   appendFile,
@@ -7,6 +8,8 @@ import {
   writeFile,
 } from "node:fs/promises";
 import path from "node:path";
+import { promisify } from "node:util";
+import { writeStage } from "../workspace/stage";
 import { dataDir, isMissing, isValidProjectId, projectDir } from "./paths";
 
 export type Project = {
@@ -42,6 +45,18 @@ function slugify(name: string): string {
   return slug || "project";
 }
 
+const git = promisify(execFile);
+
+/** Each project's workspace is its own git repo, starting at the Init stage. */
+async function initWorkspace(dir: string): Promise<void> {
+  await mkdir(dir, { recursive: true });
+  await git("git", ["init", "-q"], { cwd: dir });
+  // A local identity, so the agent can commit without touching the user's own.
+  await git("git", ["config", "user.name", "Builder"], { cwd: dir });
+  await git("git", ["config", "user.email", "builder@localhost"], { cwd: dir });
+  await writeStage(dir, "Init");
+}
+
 async function writeProject(project: Project): Promise<void> {
   await writeFile(
     metaFile(project.id),
@@ -60,7 +75,7 @@ export async function createProject(rawName: unknown): Promise<Project> {
     createdAt: new Date().toISOString(),
     sessionId: null,
   };
-  await mkdir(workspaceDir(project.id), { recursive: true });
+  await initWorkspace(workspaceDir(project.id));
   await writeProject(project);
   return project;
 }

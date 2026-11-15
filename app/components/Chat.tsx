@@ -9,7 +9,10 @@ import {
   type FormEvent,
   type KeyboardEvent,
 } from "react";
+import { StageList } from "./StageList";
 import { UNREACHABLE } from "./post-json";
+import { parseChoices } from "../../src/lib/chat/choices";
+import type { Stage } from "../../src/stages";
 import type { ChatEvent } from "../../src/lib/chat/send";
 import type { ChatMessage } from "../../src/lib/store/projects";
 
@@ -36,7 +39,7 @@ const MessageList = memo(function MessageList({
   return messages.map((message, index) => (
     <div key={index} className={`msg ${message.role}`}>
       <span className="who">{WHO[message.role]}</span>
-      {message.text}
+      {parseChoices(message.text).text}
     </div>
   ));
 });
@@ -45,13 +48,20 @@ type Props = {
   projectId: string;
   initialMessages: ChatMessage[];
   hasKey: boolean;
+  initialStage: Stage;
 };
 
-export function Chat({ projectId, initialMessages, hasKey }: Props) {
+export function Chat({
+  projectId,
+  initialMessages,
+  hasKey,
+  initialStage,
+}: Props) {
   const [messages, setMessages] = useState(initialMessages);
   const [draft, setDraft] = useState("");
   const [streaming, setStreaming] = useState<string | null>(null);
   const [activity, setActivity] = useState<string | null>(null);
+  const [stage, setStage] = useState(initialStage);
   const [notice, setNotice] = useState<string | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const busy = streaming !== null;
@@ -69,9 +79,8 @@ export function Chat({ projectId, initialMessages, hasKey }: Props) {
     return () => cancelAnimationFrame(frame);
   }, [streaming]);
 
-  async function send(event?: FormEvent) {
-    event?.preventDefault();
-    const text = draft.trim();
+  async function send(raw: string) {
+    const text = raw.trim();
     if (!text || busy) return;
 
     const before = messages;
@@ -117,6 +126,7 @@ export function Chat({ projectId, initialMessages, hasKey }: Props) {
           setActivity(TOOL_LABEL[chatEvent.name] ?? "Working");
         } else if (chatEvent.type === "done") {
           saved = chatEvent.messages;
+          setStage(chatEvent.stage);
         }
       };
 
@@ -146,6 +156,7 @@ export function Chat({ projectId, initialMessages, hasKey }: Props) {
             r.json()
           );
           if (Array.isArray(data.messages)) setMessages(data.messages);
+          if (data.stage) setStage(data.stage);
         } catch {
           // Keep what is on screen.
         }
@@ -166,12 +177,17 @@ export function Chat({ projectId, initialMessages, hasKey }: Props) {
       !event.nativeEvent.isComposing
     ) {
       event.preventDefault();
-      void send();
+      void send(draft);
     }
   }
 
+  const last = messages.at(-1);
+  const choices =
+    !busy && last?.role === "assistant" ? parseChoices(last.text).choices : [];
+
   return (
     <>
+      <StageList current={stage} />
       <div className="chat" aria-live="polite">
         {messages.length === 0 && !busy && (
           <p className="muted">
@@ -183,12 +199,26 @@ export function Chat({ projectId, initialMessages, hasKey }: Props) {
         {busy && (
           <div className="msg assistant">
             <span className="who">{WHO.assistant}</span>
-            {streaming}
+            {streaming.split("```choices")[0]}
             {activity && <div className="activity">{activity}…</div>}
           </div>
         )}
         <div ref={endRef} />
       </div>
+
+      {choices.length > 0 && (
+        <div className="choices" role="group" aria-label="Quick answers">
+          {choices.map((choice) => (
+            <button
+              key={choice}
+              type="button"
+              onClick={() => void send(choice)}
+            >
+              {choice}
+            </button>
+          ))}
+        </div>
+      )}
 
       {!hasKey && (
         <p className="notice" role="alert">
@@ -202,7 +232,13 @@ export function Chat({ projectId, initialMessages, hasKey }: Props) {
         </p>
       )}
 
-      <form onSubmit={send} className="panel">
+      <form
+        onSubmit={(event: FormEvent) => {
+          event.preventDefault();
+          void send(draft);
+        }}
+        className="panel"
+      >
         <label htmlFor="message">Your message</label>
         <div className="row">
           <textarea

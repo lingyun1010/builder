@@ -1,6 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getProject, readTranscript } from "../../../src/lib/store/projects";
+import {
+  getProject,
+  readTranscript,
+  workspaceDir,
+} from "../../../src/lib/store/projects";
+import { readStage } from "../../../src/lib/workspace/stage";
 import { apiKeyStatus } from "../../../src/lib/store/secrets";
 import { Chat } from "../../components/Chat";
 
@@ -15,9 +20,10 @@ export default async function ProjectPage({
   const project = await getProject(id);
   if (!project) notFound();
 
-  const [messages, status] = await Promise.all([
+  const [messages, status, stage] = await Promise.all([
     readTranscript(id),
     apiKeyStatus(),
+    readStage(workspaceDir(id)),
   ]);
 
   return (
@@ -30,6 +36,7 @@ export default async function ProjectPage({
         projectId={project.id}
         initialMessages={messages}
         hasKey={status.saved}
+        initialStage={stage}
       />
     </main>
   );
