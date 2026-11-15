@@ -13,7 +13,7 @@ Hosted web app that lets non-technical users build apps by chatting with an agen
 - Evidence: see docs/adr/0005-evidence-storage.md (evidence/pr-N branch, CI calls Builder API, 90-day retention).
 - Guardrail (.claude/hooks/block-dangerous-git.sh): the agent may only push a feat/<branch> to origin, with an optional -u. Force pushes, main and any other branch are blocked.
 - Automation hooks from lingyun-project (stage nudges, pre-PR, pre-merge): not chosen yet; offer once.
-- Current stage: Init gate met. Loop: Build -> Pre-PR -> Review -> Merge -> Post-merge, per ticket. Now: P001, then P002 (prototype tickets).
+- Current stage: Post-merge for the local prototype. P001 (chat tracer) is merged and P002 (methodology stages, choice cards) is in its PR; both tickets are done. Next: the user pastes their API key and tries it (the happy path with a real key has not been run). Hosted tickets T001-T004, T013, T014 stay deferred.
 
 ## Standing rules from the user (2026-11-15)
 
