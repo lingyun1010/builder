@@ -60,9 +60,15 @@ export async function startChat(
   }
   running.add(projectId);
 
-  // The lock is released when the returned generator finishes, so the caller
-  // must iterate it to the end or call .return() on it.
-  return run(project, text, runner, { apiKey, signal });
+  const chat = run(project, text, runner, { apiKey, signal });
+  // return() on a generator that never started skips its finally block, which
+  // would leave the project locked. Release the lock on every return().
+  const finish = chat.return.bind(chat);
+  chat.return = (value) => {
+    running.delete(projectId);
+    return finish(value);
+  };
+  return chat;
 }
 
 async function* run(

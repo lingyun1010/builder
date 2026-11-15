@@ -1,4 +1,4 @@
-import { readFile, stat } from "node:fs/promises";
+import { appendFile, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
@@ -10,6 +10,7 @@ import {
   setSessionId,
   workspaceDir,
 } from "../../src/lib/store/projects";
+import { projectDir } from "../../src/lib/store/paths";
 import { useTempDataDir } from "../helpers/tmp-data";
 
 describe("project file store", () => {
@@ -69,5 +70,15 @@ describe("project file store", () => {
     const project = await createProject("Resume");
     await setSessionId(project, "sess-123");
     expect((await getProject(project.id))?.sessionId).toBe("sess-123");
+  });
+
+  it("skips a transcript line that was cut short", async () => {
+    const { id } = await createProject("Torn");
+    await appendMessage(id, { role: "user", text: "kept" });
+    await appendFile(
+      path.join(projectDir(id), "transcript.jsonl"),
+      '{"role":"user","te'
+    );
+    expect((await readTranscript(id)).map((m) => m.text)).toEqual(["kept"]);
   });
 });

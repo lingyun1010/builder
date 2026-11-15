@@ -54,7 +54,7 @@ export async function POST(req: Request, { params }: Ctx): Promise<Response> {
       else controller.enqueue(encoder.encode(JSON.stringify(value) + "\n"));
     },
     async cancel() {
-      // Browser went away: let the run finish saving, then release the project.
+      // Browser went away: release the project (the request signal stops the agent).
       await events.return(undefined);
     },
   });

@@ -119,5 +119,11 @@ export async function readTranscript(id: string): Promise<ChatMessage[]> {
   return raw
     .split("\n")
     .filter(Boolean)
-    .map((line) => JSON.parse(line) as ChatMessage);
+    .flatMap((line) => {
+      try {
+        return [JSON.parse(line) as ChatMessage];
+      } catch {
+        return []; // a line cut short by a crash must not break the whole chat
+      }
+    });
 }

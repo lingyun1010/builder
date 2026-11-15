@@ -1,7 +1,7 @@
 ---
 id: P001
 title: "Local prototype tracer: API key, project, chat with agent, saved to files"
-status: in-progress
+status: done
 blocked_by: []
 seam: Chat UI <-> API routes; API routes <-> file store; chat <-> agent runner (Agent SDK)
 branch: feat/P001-local-chat

@@ -11,6 +11,9 @@ function hostname(host: string): string {
  * the request must be addressed to this machine and must not come from
  * another origin.
  *
+ * Requests with no Origin or Sec-Fetch-Site (curl, scripts) pass if the Host is
+ * local: the Host check is what blocks DNS rebinding from a browser.
+ *
  * Two layers use it on purpose: proxy.ts for every request, and each API route
  * again. With no sign-in, one wrong matcher in proxy.ts must not expose a route.
  */

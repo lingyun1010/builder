@@ -157,4 +157,12 @@ describe("chat seam (file store + agent runner)", () => {
     });
     await collect(first);
   });
+
+  it("frees the project when the stream is closed before it starts", async () => {
+    await saveApiKey(TEST_KEY);
+    const { id } = await createProject("Demo");
+    const stream = await startChat(id, "hi", fakeRunner([]));
+    await stream.return(undefined);
+    await expect(startChat(id, "again", fakeRunner([]))).resolves.toBeDefined();
+  });
 });
