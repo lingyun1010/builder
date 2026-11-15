@@ -5,6 +5,7 @@ import {
   mkdir,
   readFile,
   readdir,
+  rm,
   writeFile,
 } from "node:fs/promises";
 import path from "node:path";
@@ -45,16 +46,47 @@ function slugify(name: string): string {
   return slug || "project";
 }
 
-const git = promisify(execFile);
+const execGit = promisify(execFile);
 
-/** Each project's workspace is its own git repo, starting at the Init stage. */
+// The agent controls what is inside .git (config, hooks) in its workspace, so
+// the app's own git calls turn those off, and ignore GIT_* from the environment.
+const SAFE_GIT = [
+  "-c",
+  "core.fsmonitor=",
+  "-c",
+  "core.hooksPath=/dev/null",
+  "-c",
+  "commit.gpgsign=false",
+  "-c",
+  "user.name=Builder",
+  "-c",
+  "user.email=builder@localhost",
+];
+
+async function git(cwd: string, ...args: string[]): Promise<void> {
+  const env = Object.fromEntries(
+    Object.entries(process.env).filter(([name]) => !name.startsWith("GIT_"))
+  );
+  await execGit("git", [...SAFE_GIT, ...args], {
+    cwd,
+    env: env as NodeJS.ProcessEnv,
+  });
+}
+
+/**
+ * Each project's workspace is its own git repo on main with a first commit,
+ * starting at the Init stage. The stage file stays out of git, so switching
+ * branches cannot change it.
+ */
 async function initWorkspace(dir: string): Promise<void> {
   await mkdir(dir, { recursive: true });
-  await git("git", ["init", "-q"], { cwd: dir });
-  // A local identity, so the agent can commit without touching the user's own.
-  await git("git", ["config", "user.name", "Builder"], { cwd: dir });
-  await git("git", ["config", "user.email", "builder@localhost"], { cwd: dir });
+  await git(dir, "init", "-q", "-b", "main", "--template=");
+  await writeFile(path.join(dir, ".gitignore"), ".DS_Store\nnode_modules/\n");
+  await mkdir(path.join(dir, ".git", "info"), { recursive: true });
+  await writeFile(path.join(dir, ".git", "info", "exclude"), ".builder/\n");
   await writeStage(dir, "Init");
+  await git(dir, "add", ".gitignore");
+  await git(dir, "commit", "-q", "-m", "Start project");
 }
 
 async function writeProject(project: Project): Promise<void> {
@@ -75,8 +107,14 @@ export async function createProject(rawName: unknown): Promise<Project> {
     createdAt: new Date().toISOString(),
     sessionId: null,
   };
-  await initWorkspace(workspaceDir(project.id));
-  await writeProject(project);
+  try {
+    await initWorkspace(workspaceDir(project.id));
+    await writeProject(project);
+  } catch (error) {
+    // Do not leave a folder behind that is not a project.
+    await rm(projectDir(project.id), { recursive: true, force: true });
+    throw error;
+  }
   return project;
 }
 

@@ -11,7 +11,7 @@ import {
 } from "react";
 import { StageList } from "./StageList";
 import { UNREACHABLE } from "./post-json";
-import { parseChoices } from "../../src/lib/chat/choices";
+import { hideTrailingChoices, parseChoices } from "../../src/lib/chat/choices";
 import type { Stage } from "../../src/stages";
 import type { ChatEvent } from "../../src/lib/chat/send";
 import type { ChatMessage } from "../../src/lib/store/projects";
@@ -39,7 +39,9 @@ const MessageList = memo(function MessageList({
   return messages.map((message, index) => (
     <div key={index} className={`msg ${message.role}`}>
       <span className="who">{WHO[message.role]}</span>
-      {parseChoices(message.text).text}
+      {message.role === "assistant"
+        ? parseChoices(message.text).text
+        : message.text}
     </div>
   ));
 });
@@ -79,13 +81,14 @@ export function Chat({
     return () => cancelAnimationFrame(frame);
   }, [streaming]);
 
-  async function send(raw: string) {
+  // `fromDraft`: the text came from the box, so the box is cleared (and refilled on failure).
+  async function send(raw: string, fromDraft = false) {
     const text = raw.trim();
     if (!text || busy) return;
 
     const before = messages;
     setNotice(null);
-    setDraft("");
+    if (fromDraft) setDraft("");
     setMessages([
       ...before,
       { role: "user", text, at: new Date().toISOString() },
@@ -109,7 +112,7 @@ export function Chat({
         setNotice(data?.error ?? UNREACHABLE);
         // Nothing was saved: put the message back so it is not lost.
         setMessages(before);
-        setDraft(text);
+        if (fromDraft) setDraft(text);
         return;
       }
 
@@ -177,7 +180,7 @@ export function Chat({
       !event.nativeEvent.isComposing
     ) {
       event.preventDefault();
-      void send(draft);
+      void send(draft, true);
     }
   }
 
@@ -199,7 +202,7 @@ export function Chat({
         {busy && (
           <div className="msg assistant">
             <span className="who">{WHO.assistant}</span>
-            {streaming.split("```choices")[0]}
+            {hideTrailingChoices(streaming)}
             {activity && <div className="activity">{activity}…</div>}
           </div>
         )}
@@ -235,7 +238,7 @@ export function Chat({
       <form
         onSubmit={(event: FormEvent) => {
           event.preventDefault();
-          void send(draft);
+          void send(draft, true);
         }}
         className="panel"
       >

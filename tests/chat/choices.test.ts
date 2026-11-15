@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseChoices } from "../../src/lib/chat/choices";
+import { hideTrailingChoices, parseChoices } from "../../src/lib/chat/choices";
 
 describe("choice cards", () => {
   it("splits a trailing choices block from the reply", () => {
@@ -34,5 +34,18 @@ describe("choice cards", () => {
   it("only reads a block at the end, not one quoted in the middle", () => {
     const reply = '```choices\n["x"]\n```\nand then more text';
     expect(parseChoices(reply)).toEqual({ text: reply, choices: [] });
+  });
+});
+
+describe("hiding a choices block while the reply streams", () => {
+  it("cuts a complete or half-typed trailing block", () => {
+    expect(hideTrailingChoices('Who?\n\n```choices\n["a"')).toBe("Who?");
+    expect(hideTrailingChoices("Who?\n\n```cho")).toBe("Who?");
+    expect(hideTrailingChoices("Who?\n\n``")).toBe("Who?");
+  });
+
+  it("keeps other text, including other code fences", () => {
+    expect(hideTrailingChoices("Done.")).toBe("Done.");
+    expect(hideTrailingChoices("Run:\n```bash\nls")).toBe("Run:\n```bash\nls");
   });
 });

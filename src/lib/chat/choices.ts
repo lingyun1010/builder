@@ -33,3 +33,12 @@ export function parseChoices(reply: string): ParsedReply {
 
   return { text: reply.slice(0, match.index).trimEnd(), choices };
 }
+
+/** The reply as it streams in, without a choices block that is still being typed. */
+export function hideTrailingChoices(partial: string): string {
+  const tail =
+    /\n*(`{1,3}(?:c(?:h(?:o(?:i(?:c(?:e(?:s[\s\S]*)?)?)?)?)?)?)?)$/.exec(
+      partial
+    );
+  return tail ? partial.slice(0, tail.index) : partial;
+}
