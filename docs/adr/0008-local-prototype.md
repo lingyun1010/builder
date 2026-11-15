@@ -20,6 +20,7 @@ The user asked for one working prototype before any hosted work: no sign-in or s
 - ADR 0004 says the API key never enters the sandbox. Here the agent process receives the key in its environment. Acceptable only because the machine and the key belong to the same person.
 - No fresh-reviewer sessions per gate, no CI evidence gate, no deploy (ADR 0002, 0005). The agent follows the methodology from its instructions; nothing outside the model enforces a gate.
 - One user, one run per project at a time.
+- The agent controls `.git/config` and `.git/hooks` in its own workspace. The app runs git there only when a project is created, with hooks and fsmonitor turned off. Opening a workspace in a terminal or editor could run those hooks outside the sandbox, so do not do that with a project you do not trust. Not verified: that the SDK command sandbox lets the agent write to `.git` for commits and branches.
 
 ## Tickets
 

@@ -6,6 +6,7 @@ import {
   getProject,
   readTranscript,
 } from "../../src/lib/store/projects";
+import { writeStage } from "../../src/lib/workspace/stage";
 import { saveApiKey } from "../../src/lib/store/secrets";
 import { TEST_KEY, useTempDataDir } from "../helpers/tmp-data";
 
@@ -164,5 +165,16 @@ describe("chat seam (file store + agent runner)", () => {
     const stream = await startChat(id, "hi", fakeRunner([]));
     await stream.return(undefined);
     await expect(startChat(id, "again", fakeRunner([]))).resolves.toBeDefined();
+  });
+
+  it("reports the stage the agent recorded in the workspace", async () => {
+    await saveApiKey(TEST_KEY);
+    const { id } = await createProject("Demo");
+    const runner: AgentRunner = async function* (input) {
+      await writeStage(input.cwd, "Think");
+      yield { type: "text", text: "Let's think." };
+    };
+    const events = await collect(await startChat(id, "hi", runner));
+    expect(events.at(-1)).toMatchObject({ type: "done", stage: "Think" });
   });
 });

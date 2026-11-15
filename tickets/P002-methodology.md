@@ -1,7 +1,7 @@
 ---
 id: P002
 title: "Local prototype: methodology stages and choice cards"
-status: todo
+status: done
 blocked_by: [P001]
 seam: Agent <-> workspace state (stage file); chat UI <-> choice cards
 branch: feat/P002-methodology

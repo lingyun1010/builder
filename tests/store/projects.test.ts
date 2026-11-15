@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { appendFile, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
@@ -80,5 +81,25 @@ describe("project file store", () => {
       '{"role":"user","te'
     );
     expect((await readTranscript(id)).map((m) => m.text)).toEqual(["kept"]);
+  });
+
+  it("makes the workspace its own git repo with a stage file", async () => {
+    const { id } = await createProject("Own repo");
+    const ws = workspaceDir(id);
+    expect((await stat(path.join(ws, ".git"))).isDirectory()).toBe(true);
+    expect(await readFile(path.join(ws, ".builder", "stage"), "utf8")).toBe(
+      "Init\n"
+    );
+  });
+
+  it("starts the workspace repo on main with a first commit, and keeps the stage file out of git", async () => {
+    const { id } = await createProject("First commit");
+    const ws = workspaceDir(id);
+    const git = (...args: string[]) =>
+      execFileSync("git", args, { cwd: ws, encoding: "utf8" }).trim();
+    expect(git("branch", "--show-current")).toBe("main");
+    expect(git("rev-list", "--count", "HEAD")).toBe("1");
+    expect(git("status", "--porcelain")).toBe("");
+    expect(git("ls-files")).toBe(".gitignore");
   });
 });
