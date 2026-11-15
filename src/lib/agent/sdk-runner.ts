@@ -15,11 +15,20 @@ const FRIENDLY_ERRORS: Record<string, string> = {
   model_not_found: "Your API key cannot use the configured model.",
 };
 
-/** Environment for the agent process: this machine's, with only the user's key for auth. */
-function agentEnv(apiKey: string): Record<string, string | undefined> {
-  const env: Record<string, string | undefined> = { ...process.env };
-  delete env.ANTHROPIC_AUTH_TOKEN;
-  delete env.CLAUDE_CODE_OAUTH_TOKEN;
+// Names that look like secrets are not passed on: the agent runs commands, and
+// this app's own environment (database URLs, tokens) is none of its business.
+const SECRET_NAME =
+  /KEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|SUPABASE|DATABASE|AUTH/i;
+
+/** Environment for the agent process: this machine's, minus secrets, plus the user's key. */
+export function agentEnv(
+  apiKey: string,
+  base: Record<string, string | undefined> = process.env
+): Record<string, string | undefined> {
+  const env: Record<string, string | undefined> = {};
+  for (const [name, value] of Object.entries(base)) {
+    if (!SECRET_NAME.test(name)) env[name] = value;
+  }
   env.ANTHROPIC_API_KEY = apiKey;
   env.CLAUDE_AGENT_SDK_CLIENT_APP = "builder-prototype/0.0.0";
   return env;
