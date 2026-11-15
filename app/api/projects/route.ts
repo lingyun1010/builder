@@ -11,12 +11,10 @@ export async function GET(req: Request): Promise<Response> {
 export async function POST(req: Request): Promise<Response> {
   if (!isLocalRequest(req)) return forbidden();
   const body = await req.json().catch(() => null);
-  const name = typeof body?.name === "string" ? body.name.trim() : "";
-  if (!name) {
-    return Response.json(
-      { error: "Give your project a name." },
-      { status: 400 }
-    );
+  try {
+    const project = await createProject(body?.name);
+    return Response.json({ project }, { status: 201 });
+  } catch (error) {
+    return Response.json({ error: (error as Error).message }, { status: 400 });
   }
-  return Response.json({ project: await createProject(name) }, { status: 201 });
 }

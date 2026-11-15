@@ -3,12 +3,13 @@ import {
   appendMessage,
   getProject,
   setSessionId,
+  type Project,
   workspaceDir,
   type ChatMessage,
 } from "../store/projects";
 import { getApiKey } from "../store/secrets";
 
-export type ChatEvent = AgentEvent | { type: "done"; message: ChatMessage };
+export type ChatEvent = AgentEvent | { type: "done"; messages: ChatMessage[] };
 
 export type ChatErrorCode = "not_found" | "empty" | "no_key" | "busy";
 
@@ -35,13 +36,15 @@ export async function startChat(
   runner: AgentRunner,
   signal?: AbortSignal
 ): Promise<AsyncGenerator<ChatEvent>> {
-  const project = await getProject(projectId);
+  const [project, apiKey] = await Promise.all([
+    getProject(projectId),
+    getApiKey(),
+  ]);
   if (!project) throw new ChatError("not_found", "Project not found.");
 
   const text = String(rawText ?? "").trim();
   if (!text) throw new ChatError("empty", "Write a message first.");
 
-  const apiKey = await getApiKey();
   if (!apiKey) {
     throw new ChatError(
       "no_key",
@@ -57,44 +60,44 @@ export async function startChat(
   }
   running.add(projectId);
 
-  return run(projectId, text, runner, {
-    apiKey,
-    sessionId: project.sessionId,
-    signal,
-  });
+  // The lock is released when the returned generator finishes, so the caller
+  // must iterate it to the end or call .return() on it.
+  return run(project, text, runner, { apiKey, signal });
 }
 
 async function* run(
-  projectId: string,
+  initial: Project,
   text: string,
   runner: AgentRunner,
-  opts: { apiKey: string; sessionId: string | null; signal?: AbortSignal }
+  opts: { apiKey: string; signal?: AbortSignal }
 ): AsyncGenerator<ChatEvent> {
+  const projectId = initial.id;
+  const saved: ChatMessage[] = [];
+  let project = initial;
   let reply = "";
+  // The first failure wins: whether the agent reported it or the run threw.
   let failure: string | null = null;
-  let sessionId = opts.sessionId;
 
   try {
-    await appendMessage(projectId, { role: "user", text });
+    saved.push(await appendMessage(projectId, { role: "user", text }));
 
     try {
       const events = runner({
         prompt: text,
         cwd: workspaceDir(projectId),
         apiKey: opts.apiKey,
-        sessionId: opts.sessionId,
+        sessionId: project.sessionId,
         signal: opts.signal,
       });
       for await (const event of events) {
         if (event.type === "session") {
-          if (event.sessionId !== sessionId) {
-            sessionId = event.sessionId;
-            await setSessionId(projectId, sessionId);
+          if (event.sessionId !== project.sessionId) {
+            project = await setSessionId(project, event.sessionId);
           }
         } else if (event.type === "text") {
           reply += event.text;
         } else if (event.type === "error") {
-          failure = event.message;
+          failure ??= event.message;
         }
         yield event;
       }
@@ -107,20 +110,23 @@ async function* run(
       }
     }
 
-    let last: ChatMessage | null = null;
     if (reply.trim()) {
-      last = await appendMessage(projectId, {
-        role: "assistant",
-        text: reply.trim(),
-      });
+      saved.push(
+        await appendMessage(projectId, {
+          role: "assistant",
+          text: reply.trim(),
+        })
+      );
     }
-    if (failure || !last) {
-      last = await appendMessage(projectId, {
-        role: "error",
-        text: failure ?? "The agent finished without a reply.",
-      });
+    if (failure || !reply.trim()) {
+      saved.push(
+        await appendMessage(projectId, {
+          role: "error",
+          text: failure ?? "The agent finished without a reply.",
+        })
+      );
     }
-    yield { type: "done", message: last };
+    yield { type: "done", messages: saved };
   } finally {
     running.delete(projectId);
   }

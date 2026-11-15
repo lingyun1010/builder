@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
+import { postJson } from "./post-json";
 
 export function NewProjectForm() {
   const router = useRouter();
@@ -13,23 +14,16 @@ export function NewProjectForm() {
     event.preventDefault();
     setCreating(true);
     setError(null);
-    try {
-      const res = await fetch("/api/projects", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ name }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.error ?? "Could not create the project.");
-        setCreating(false);
-        return;
-      }
+    const { ok, data } = await postJson<{
+      project?: { id: string };
+      error?: string;
+    }>("/api/projects", { name });
+    if (ok && data?.project) {
       router.push(`/projects/${data.project.id}`);
-    } catch {
-      setError("Could not reach the app. Is it still running?");
-      setCreating(false);
+      return;
     }
+    setError(data?.error ?? "Could not create the project.");
+    setCreating(false);
   }
 
   return (

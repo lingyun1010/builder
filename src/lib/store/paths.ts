@@ -16,3 +16,8 @@ export function projectDir(id: string): string {
   if (!isValidProjectId(id)) throw new Error("Invalid project id");
   return path.join(dataDir(), "projects", id);
 }
+
+/** True when a file-system error means "not there". */
+export function isMissing(error: unknown): boolean {
+  return (error as NodeJS.ErrnoException)?.code === "ENOENT";
+}

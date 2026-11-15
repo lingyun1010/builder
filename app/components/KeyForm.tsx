@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import { postJson } from "./post-json";
 import type { ApiKeyStatus } from "../../src/lib/store/secrets";
 
 export function KeyForm({ initial }: { initial: ApiKeyStatus }) {
@@ -13,23 +14,17 @@ export function KeyForm({ initial }: { initial: ApiKeyStatus }) {
     event.preventDefault();
     setSaving(true);
     setError(null);
-    try {
-      const res = await fetch("/api/key", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ key }),
-      });
-      const data = await res.json();
-      if (!res.ok) setError(data.error ?? "Could not save the key.");
-      else {
-        setStatus(data);
-        setKey("");
-      }
-    } catch {
-      setError("Could not reach the app. Is it still running?");
-    } finally {
-      setSaving(false);
+    const { ok, data } = await postJson<ApiKeyStatus & { error?: string }>(
+      "/api/key",
+      { key }
+    );
+    if (ok && data) {
+      setStatus(data);
+      setKey("");
+    } else {
+      setError(data?.error ?? "Could not save the key.");
     }
+    setSaving(false);
   }
 
   return (

@@ -10,6 +10,9 @@ function hostname(host: string): string {
  * website from calling these routes from the user's browser is this check:
  * the request must be addressed to this machine and must not come from
  * another origin.
+ *
+ * Two layers use it on purpose: proxy.ts for every request, and each API route
+ * again. With no sign-in, one wrong matcher in proxy.ts must not expose a route.
  */
 export function isLocalRequest(req: Request): boolean {
   const host = req.headers.get("host") ?? new URL(req.url).host;

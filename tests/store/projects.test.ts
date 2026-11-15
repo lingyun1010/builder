@@ -66,8 +66,8 @@ describe("project file store", () => {
   });
 
   it("saves the agent session id on the project", async () => {
-    const { id } = await createProject("Resume");
-    await setSessionId(id, "sess-123");
-    expect((await getProject(id))?.sessionId).toBe("sess-123");
+    const project = await createProject("Resume");
+    await setSessionId(project, "sess-123");
+    expect((await getProject(project.id))?.sessionId).toBe("sess-123");
   });
 });

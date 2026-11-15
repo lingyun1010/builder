@@ -25,7 +25,7 @@ function agentEnv(apiKey: string): Record<string, string | undefined> {
   return env;
 }
 
-export function agentOptions(input: {
+function agentOptions(input: {
   cwd: string;
   apiKey: string;
   sessionId: string | null;
@@ -128,10 +128,6 @@ export const sdkRunner: AgentRunner = async function* (input) {
         }
       }
     }
-  } catch (cause) {
-    // The SDK also throws after it reports an error result. Once the user has
-    // been told what went wrong, the second report adds nothing.
-    if (!reportedError) throw cause;
   } finally {
     input.signal?.removeEventListener("abort", onAbort);
   }

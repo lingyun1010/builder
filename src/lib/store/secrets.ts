@@ -1,6 +1,6 @@
 import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { dataDir } from "./paths";
+import { dataDir, isMissing } from "./paths";
 
 export type ApiKeyStatus = { saved: boolean; source: "file" | "env" | null };
 
@@ -16,13 +16,13 @@ async function readSavedKey(): Promise<string | null> {
       ? parsed.anthropicApiKey
       : null;
   } catch (error) {
-    if ((error as NodeJS.ErrnoException)?.code === "ENOENT") return null;
+    if (isMissing(error)) return null;
     throw error;
   }
 }
 
-export async function saveApiKey(rawKey: string): Promise<void> {
-  const key = String(rawKey ?? "").trim();
+export async function saveApiKey(rawKey: unknown): Promise<void> {
+  const key = (typeof rawKey === "string" ? rawKey : "").trim();
   if (!KEY_SHAPE.test(key)) {
     throw new Error(
       "That does not look like an Anthropic API key (it starts with sk-ant-)."
@@ -41,15 +41,23 @@ export async function saveApiKey(rawKey: string): Promise<void> {
 }
 
 /** The saved key wins; ANTHROPIC_API_KEY from the environment is the fallback. */
+async function resolveKey(): Promise<{
+  key: string;
+  source: "file" | "env";
+} | null> {
+  const saved = await readSavedKey();
+  if (saved) return { key: saved, source: "file" };
+  const env = process.env.ANTHROPIC_API_KEY?.trim();
+  return env ? { key: env, source: "env" } : null;
+}
+
 export async function getApiKey(): Promise<string | null> {
-  return (
-    (await readSavedKey()) ?? (process.env.ANTHROPIC_API_KEY?.trim() || null)
-  );
+  return (await resolveKey())?.key ?? null;
 }
 
 export async function apiKeyStatus(): Promise<ApiKeyStatus> {
-  if (await readSavedKey()) return { saved: true, source: "file" };
-  if (process.env.ANTHROPIC_API_KEY?.trim())
-    return { saved: true, source: "env" };
-  return { saved: false, source: null };
+  const found = await resolveKey();
+  return found
+    ? { saved: true, source: found.source }
+    : { saved: false, source: null };
 }

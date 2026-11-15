@@ -7,7 +7,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import path from "node:path";
-import { dataDir, isValidProjectId, projectDir } from "./paths";
+import { dataDir, isMissing, isValidProjectId, projectDir } from "./paths";
 
 export type Project = {
   id: string;
@@ -32,10 +32,6 @@ export function workspaceDir(id: string): string {
   return path.join(projectDir(id), "workspace");
 }
 
-function isMissing(error: unknown): boolean {
-  return (error as NodeJS.ErrnoException)?.code === "ENOENT";
-}
-
 function slugify(name: string): string {
   const slug = name
     .toLowerCase()
@@ -46,9 +42,17 @@ function slugify(name: string): string {
   return slug || "project";
 }
 
-export async function createProject(rawName: string): Promise<Project> {
-  const name = rawName.trim().slice(0, 80);
-  if (!name) throw new Error("A project needs a name");
+async function writeProject(project: Project): Promise<void> {
+  await writeFile(
+    metaFile(project.id),
+    JSON.stringify(project, null, 2) + "\n"
+  );
+}
+
+/** Throws an Error whose message is meant for the user when the name is empty. */
+export async function createProject(rawName: unknown): Promise<Project> {
+  const name = (typeof rawName === "string" ? rawName : "").trim().slice(0, 80);
+  if (!name) throw new Error("Give your project a name.");
 
   const project: Project = {
     id: `${slugify(name)}-${randomBytes(3).toString("hex")}`,
@@ -57,10 +61,7 @@ export async function createProject(rawName: string): Promise<Project> {
     sessionId: null,
   };
   await mkdir(workspaceDir(project.id), { recursive: true });
-  await writeFile(
-    metaFile(project.id),
-    JSON.stringify(project, null, 2) + "\n"
-  );
+  await writeProject(project);
   return project;
 }
 
@@ -88,16 +89,14 @@ export async function listProjects(): Promise<Project[]> {
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
+/** Saves the session id on the given project (the caller already loaded it). */
 export async function setSessionId(
-  id: string,
+  project: Project,
   sessionId: string
-): Promise<void> {
-  const project = await getProject(id);
-  if (!project) throw new Error("Project not found");
-  await writeFile(
-    metaFile(id),
-    JSON.stringify({ ...project, sessionId }, null, 2) + "\n"
-  );
+): Promise<Project> {
+  const updated = { ...project, sessionId };
+  await writeProject(updated);
+  return updated;
 }
 
 export async function appendMessage(

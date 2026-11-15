@@ -174,3 +174,8 @@ ul.projects li:first-child {
   color: var(--muted);
   margin-top: 0.4rem;
 }
+
+.hint {
+  margin: 0.4rem 0 0;
+  font-size: 0.85rem;
+}

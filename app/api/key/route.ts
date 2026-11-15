@@ -13,7 +13,7 @@ export async function POST(req: Request): Promise<Response> {
   if (!isLocalRequest(req)) return forbidden();
   const body = await req.json().catch(() => null);
   try {
-    await saveApiKey(typeof body?.key === "string" ? body.key : "");
+    await saveApiKey(body?.key);
   } catch (error) {
     return Response.json({ error: (error as Error).message }, { status: 400 });
   }

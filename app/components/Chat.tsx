@@ -2,12 +2,14 @@
 
 import Link from "next/link";
 import {
+  memo,
   useEffect,
   useRef,
   useState,
   type FormEvent,
   type KeyboardEvent,
 } from "react";
+import { UNREACHABLE } from "./post-json";
 import type { ChatEvent } from "../../src/lib/chat/send";
 import type { ChatMessage } from "../../src/lib/store/projects";
 
@@ -26,6 +28,19 @@ const TOOL_LABEL: Record<string, string> = {
   Bash: "Running a command",
 };
 
+const MessageList = memo(function MessageList({
+  messages,
+}: {
+  messages: ChatMessage[];
+}) {
+  return messages.map((message, index) => (
+    <div key={index} className={`msg ${message.role}`}>
+      <span className="who">{WHO[message.role]}</span>
+      {message.text}
+    </div>
+  ));
+});
+
 type Props = {
   projectId: string;
   initialMessages: ChatMessage[];
@@ -43,7 +58,16 @@ export function Chat({ projectId, initialMessages, hasKey }: Props) {
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: "end" });
-  }, [messages, streaming]);
+  }, [messages]);
+
+  // While a reply streams, scroll at most once per frame.
+  useEffect(() => {
+    if (streaming === null) return;
+    const frame = requestAnimationFrame(() =>
+      endRef.current?.scrollIntoView({ block: "end" })
+    );
+    return () => cancelAnimationFrame(frame);
+  }, [streaming]);
 
   async function send(event?: FormEvent) {
     event?.preventDefault();
@@ -60,76 +84,79 @@ export function Chat({ projectId, initialMessages, hasKey }: Props) {
     setStreaming("");
     setActivity("Thinking");
 
-    let res: Response;
     try {
-      res = await fetch(`/api/projects/${projectId}/messages`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ text }),
-      });
-    } catch {
-      res = new Response(null, { status: 503 });
-    }
-    if (!res.ok || !res.body) {
-      const data = await res.json().catch(() => null);
-      setNotice(data?.error ?? "Could not reach the app. Is it still running?");
-      // Nothing was saved: put the message back so it is not lost.
-      setMessages(before);
-      setDraft(text);
+      let res: Response;
+      try {
+        res = await fetch(`/api/projects/${projectId}/messages`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ text }),
+        });
+      } catch {
+        res = new Response(null, { status: 503 });
+      }
+      if (!res.ok || !res.body) {
+        const data = await res.json().catch(() => null);
+        setNotice(data?.error ?? UNREACHABLE);
+        // Nothing was saved: put the message back so it is not lost.
+        setMessages(before);
+        setDraft(text);
+        return;
+      }
+
+      let reply = "";
+      let saved: ChatMessage[] | null = null;
+      const handle = (line: string) => {
+        if (!line.trim()) return;
+        const chatEvent = JSON.parse(line) as ChatEvent;
+        if (chatEvent.type === "text") {
+          reply += chatEvent.text;
+          setStreaming(reply);
+          setActivity(null);
+        } else if (chatEvent.type === "tool") {
+          setActivity(TOOL_LABEL[chatEvent.name] ?? "Working");
+        } else if (chatEvent.type === "done") {
+          saved = chatEvent.messages;
+        }
+      };
+
+      try {
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+        for (;;) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() ?? "";
+          lines.forEach(handle);
+        }
+        handle(buffer);
+      } catch {
+        // Fall through: the saved transcript below is the source of truth.
+      }
+
+      if (saved) {
+        setMessages([...before, ...(saved as ChatMessage[])]);
+      } else {
+        // The stream dropped: show whatever was saved.
+        try {
+          const data = await fetch(`/api/projects/${projectId}`).then((r) =>
+            r.json()
+          );
+          if (Array.isArray(data.messages)) setMessages(data.messages);
+        } catch {
+          // Keep what is on screen.
+        }
+        setNotice(
+          "The connection dropped before the agent finished. Reload to see what was saved."
+        );
+      }
+    } finally {
       setStreaming(null);
       setActivity(null);
-      return;
     }
-
-    let reply = "";
-    let finished = false;
-    const handle = (line: string) => {
-      if (!line.trim()) return;
-      const chatEvent = JSON.parse(line) as ChatEvent;
-      if (chatEvent.type === "text") {
-        reply += chatEvent.text;
-        setStreaming(reply);
-        setActivity(null);
-      } else if (chatEvent.type === "tool") {
-        setActivity(TOOL_LABEL[chatEvent.name] ?? "Working");
-      } else if (chatEvent.type === "done") {
-        finished = true;
-      }
-    };
-
-    try {
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-      for (;;) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() ?? "";
-        lines.forEach(handle);
-      }
-      handle(buffer);
-    } catch {
-      // Fall through: the saved transcript below is the source of truth.
-    }
-
-    // Show exactly what was saved, so a reload looks the same.
-    try {
-      const saved = await fetch(`/api/projects/${projectId}`).then((r) =>
-        r.json()
-      );
-      if (Array.isArray(saved.messages)) setMessages(saved.messages);
-    } catch {
-      finished = false;
-    }
-    if (!finished) {
-      setNotice(
-        "The connection dropped before the agent finished. Reload to see what was saved."
-      );
-    }
-    setStreaming(null);
-    setActivity(null);
   }
 
   function onKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
@@ -152,15 +179,10 @@ export function Chat({ projectId, initialMessages, hasKey }: Props) {
             can save recipes and search them.”
           </p>
         )}
-        {messages.map((message, index) => (
-          <div key={index} className={`msg ${message.role}`}>
-            <span className="who">{WHO[message.role]}</span>
-            {message.text}
-          </div>
-        ))}
+        <MessageList messages={messages} />
         {busy && (
           <div className="msg assistant">
-            <span className="who">Builder</span>
+            <span className="who">{WHO.assistant}</span>
             {streaming}
             {activity && <div className="activity">{activity}…</div>}
           </div>
@@ -195,10 +217,7 @@ export function Chat({ projectId, initialMessages, hasKey }: Props) {
             {busy ? "Working…" : "Send"}
           </button>
         </div>
-        <p
-          className="muted"
-          style={{ margin: "0.4rem 0 0", fontSize: "0.85rem" }}
-        >
+        <p className="muted hint">
           Enter sends. Shift + Enter starts a new line.
         </p>
       </form>

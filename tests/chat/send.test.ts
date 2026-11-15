@@ -52,7 +52,10 @@ describe("chat seam (file store + agent runner)", () => {
     const done = events.at(-1);
     expect(done).toMatchObject({
       type: "done",
-      message: { role: "assistant", text: "Hello there." },
+      messages: [
+        { role: "user", text: "Build me a todo app" },
+        { role: "assistant", text: "Hello there." },
+      ],
     });
 
     expect((await readTranscript(id)).map((m) => [m.role, m.text])).toEqual([
@@ -99,7 +102,11 @@ describe("chat seam (file store + agent runner)", () => {
 
     expect(events.at(-1)).toMatchObject({
       type: "done",
-      message: { role: "error", text: "Your API key was rejected." },
+      messages: [
+        { role: "user" },
+        { role: "assistant" },
+        { role: "error", text: "Your API key was rejected." },
+      ],
     });
     expect((await readTranscript(id)).map((m) => m.role)).toEqual([
       "user",
@@ -119,7 +126,7 @@ describe("chat seam (file store + agent runner)", () => {
     const events = await collect(await startChat(id, "hi", crashing));
     expect(events.at(-1)).toMatchObject({
       type: "done",
-      message: { role: "error" },
+      messages: [{ role: "user" }, { role: "assistant" }, { role: "error" }],
     });
 
     await expect(startChat(id, "again", fakeRunner([]))).resolves.toBeDefined();
